@@ -1,0 +1,15 @@
+# Dependencias
+node_modules/
+
+# Build de producción
+dist/
+
+# Variables de entorno (¡nunca subir las claves!)
+.env
+.env.local
+.env.*.local
+
+# Logs y temporales
+*.log
+.DS_Store
+.vite/
