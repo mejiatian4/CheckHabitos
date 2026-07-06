@@ -1,4 +1,5 @@
 import { el } from './dom';
+import type { GoalTerm } from '../lib/types';
 
 /** Paleta de colores disponibles para los hábitos. */
 export const HABIT_COLORS = [
@@ -106,6 +107,141 @@ export function openHabitForm(initial?: { name: string; color: string }): Promis
     document.body.append(overlay);
     requestAnimationFrame(() => overlay.classList.add('modal--visible'));
     nameInput.focus();
+  });
+}
+
+interface GoalFormResult {
+  title: string;
+  description: string | null;
+  term: GoalTerm;
+  targetDate: string | null;
+}
+
+const GOAL_TERMS: { value: GoalTerm; label: string }[] = [
+  { value: 'short', label: 'Corto' },
+  { value: 'medium', label: 'Mediano' },
+  { value: 'long', label: 'Largo' },
+];
+
+/**
+ * Abre un formulario modal para crear o editar una meta.
+ * `presetTerm` fija el plazo inicial al crear (p. ej. al pulsar "Nueva meta"
+ * dentro de la columna "Mediano plazo"). Resuelve con los datos, o con null
+ * si se cancela.
+ */
+export function openGoalForm(
+  initial?: { title: string; description: string | null; term: GoalTerm; targetDate: string | null },
+  presetTerm?: GoalTerm,
+): Promise<GoalFormResult | null> {
+  return new Promise((resolve) => {
+    const isEdit = Boolean(initial);
+    let selectedTerm: GoalTerm = initial?.term ?? presetTerm ?? 'short';
+
+    const titleInput = el('input', {
+      type: 'text',
+      class: 'field__input',
+      id: 'goal-title',
+      placeholder: 'Ej. Correr una maratón',
+      maxLength: 80,
+      value: initial?.title ?? '',
+      required: true,
+    });
+
+    const descInput = el('textarea', {
+      class: 'field__input field__input--area',
+      id: 'goal-desc',
+      placeholder: 'Detalles opcionales…',
+      maxLength: 300,
+      rows: 3,
+      value: initial?.description ?? '',
+    });
+
+    const dateInput = el('input', {
+      type: 'date',
+      class: 'field__input',
+      id: 'goal-date',
+      value: initial?.targetDate ?? '',
+    });
+
+    const termButtons = GOAL_TERMS.map(({ value, label }) => {
+      const b = el(
+        'button',
+        {
+          type: 'button',
+          class: 'term-btn' + (value === selectedTerm ? ' term-btn--active' : ''),
+        },
+        [label],
+      );
+      b.addEventListener('click', () => {
+        selectedTerm = value;
+        termRow.querySelectorAll('.term-btn').forEach((btn) => btn.classList.remove('term-btn--active'));
+        b.classList.add('term-btn--active');
+      });
+      return b;
+    });
+    const termRow = el('div', { class: 'term-toggle' }, termButtons);
+
+    const cancelBtn = el('button', { type: 'button', class: 'btn btn--ghost' }, ['Cancelar']);
+    const saveBtn = el('button', { type: 'submit', class: 'btn btn--primary' }, [
+      isEdit ? 'Guardar cambios' : 'Agregar meta',
+    ]);
+
+    const form = el('form', { class: 'modal__card', role: 'dialog', 'aria-modal': 'true' }, [
+      el('h2', { class: 'modal__title' }, [isEdit ? 'Editar meta' : 'Nueva meta']),
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field__label', for: 'goal-title' }, ['Título']),
+        titleInput,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field__label', for: 'goal-desc' }, ['Descripción']),
+        descInput,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field__label' }, ['Plazo']),
+        termRow,
+      ]),
+      el('div', { class: 'field' }, [
+        el('label', { class: 'field__label', for: 'goal-date' }, ['Fecha objetivo (opcional)']),
+        dateInput,
+      ]),
+      el('div', { class: 'modal__actions' }, [cancelBtn, saveBtn]),
+    ]);
+
+    const overlay = el('div', { class: 'modal' }, [form]);
+
+    const close = (result: GoalFormResult | null) => {
+      dismiss(overlay);
+      resolve(result);
+    };
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const title = titleInput.value.trim();
+      if (!title) {
+        titleInput.focus();
+        return;
+      }
+      close({
+        title,
+        description: descInput.value.trim() || null,
+        term: selectedTerm,
+        targetDate: dateInput.value || null,
+      });
+    });
+    cancelBtn.addEventListener('click', () => close(null));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close(null);
+    });
+    document.addEventListener('keydown', function onEsc(ev) {
+      if (ev.key === 'Escape') {
+        document.removeEventListener('keydown', onEsc);
+        close(null);
+      }
+    });
+
+    document.body.append(overlay);
+    requestAnimationFrame(() => overlay.classList.add('modal--visible'));
+    titleInput.focus();
   });
 }
 

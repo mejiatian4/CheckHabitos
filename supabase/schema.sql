@@ -59,3 +59,30 @@ create policy "habit_logs: solo el dueño"
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------
+-- Metas (corto / mediano / largo plazo)
+-- ----------------------------------------------------------------
+create table if not exists public.goals (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users (id) on delete cascade,
+  title        text not null,
+  description  text,
+  term         text not null check (term in ('short', 'medium', 'long')),
+  target_date  date,
+  completed    boolean not null default false,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists goals_user_term_idx
+  on public.goals (user_id, term);
+
+alter table public.goals enable row level security;
+
+drop policy if exists "goals: solo el dueño" on public.goals;
+create policy "goals: solo el dueño"
+  on public.goals
+  for all
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

@@ -47,6 +47,11 @@ export function isSameDay(a: Date, b: Date): boolean {
   return toISODate(a) === toISODate(b);
 }
 
+/** Diferencia en días completos entre dos fechas ISO 'YYYY-MM-DD' (b - a). */
+export function daysBetween(aISO: string, bISO: string): number {
+  return Math.round((new Date(bISO).getTime() - new Date(aISO).getTime()) / 86_400_000);
+}
+
 /** Etiquetas cortas de los días, empezando en lunes. */
 export const DAY_LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 

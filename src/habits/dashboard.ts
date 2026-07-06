@@ -4,6 +4,7 @@ import {
   weekDays,
   addWeeks,
   addDays,
+  daysBetween,
   toISODate,
   isSameDay,
   formatWeekRange,
@@ -25,6 +26,7 @@ import { icons } from '../ui/icons';
 import { toast, errorMessage } from '../ui/toast';
 import { openHabitForm, confirmDialog } from '../ui/modal';
 import { signOut } from '../auth/auth';
+import { renderGoalsBoard } from '../goals/board';
 
 const key = (habitId: string, dateISO: string) => `${habitId}|${dateISO}`;
 
@@ -95,6 +97,48 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
 
   const overview = el('div', { class: 'overview' }, [dailyCard, weeklyCard]);
 
+  // Tarjeta: consistencia (mejor racha, % del mes y mapa de calor)
+  const bestStreakValue = el('span', { class: 'stat__value' }, ['0']);
+  const monthPctValue = el('span', { class: 'stat__value' }, ['0%']);
+  const heatmapGrid = el('div', { class: 'heatmap__grid' });
+  const consistencyCard = el('section', { class: 'card card--consistency' }, [
+    el('div', { class: 'card__head' }, [
+      el('h2', { class: 'card__title' }, ['Consistencia']),
+      el('div', { class: 'stats' }, [
+        el('div', { class: 'stat stat--trophy' }, [
+          icons.trophy(),
+          el('div', { class: 'stat__body' }, [
+            bestStreakValue,
+            el('span', { class: 'stat__label' }, ['mejor racha']),
+          ]),
+        ]),
+        el('div', { class: 'stat' }, [
+          el('div', { class: 'stat__body' }, [
+            monthPctValue,
+            el('span', { class: 'stat__label' }, ['del mes']),
+          ]),
+        ]),
+      ]),
+    ]),
+    el('div', { class: 'heatmap' }, [
+      el(
+        'div',
+        { class: 'heatmap__days' },
+        DAY_LABELS.map((d) => el('span', {}, [d])),
+      ),
+      heatmapGrid,
+    ]),
+  ]);
+
+  // Tarjeta: % de éxito por hábito (últimos 30 días)
+  const habitStatsList = el('div', { class: 'habit-stats' });
+  const habitStatsCard = el('section', { class: 'card card--habitstats' }, [
+    el('div', { class: 'card__head' }, [el('h2', { class: 'card__title' }, ['Por hábito · 30 días'])]),
+    habitStatsList,
+  ]);
+
+  const statsGrid = el('div', { class: 'stats-grid' }, [consistencyCard, habitStatsCard]);
+
   // Sección de la semana: navegación + tabla
   const rangeLabel = el('span', { class: 'weeknav__range' }, ['—']);
   const prevBtn = el('button', { class: 'btn btn--icon', 'aria-label': 'Semana anterior' }, [
@@ -131,7 +175,29 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
   const tableWrap = el('div', { class: 'table-wrap' });
   const weekSection = el('section', { class: 'week' }, [weeknav, tableWrap]);
 
-  const main = el('main', { class: 'dashboard' }, [overview, weekSection]);
+  // ---- Pestañas: Hábitos / Metas ----
+  const habitsView = el('div', { class: 'view' }, [overview, weekSection, statsGrid]);
+  const goalsView = el('div', { class: 'view', style: 'display:none' });
+
+  const tabHabits = el('button', { class: 'tab tab--active', type: 'button' }, ['Hábitos']);
+  const tabGoals = el('button', { class: 'tab', type: 'button' }, ['Metas']);
+  const tabs = el('div', { class: 'tabs' }, [tabHabits, tabGoals]);
+
+  let goalsLoaded = false;
+  function showView(view: 'habits' | 'goals'): void {
+    habitsView.style.display = view === 'habits' ? '' : 'none';
+    goalsView.style.display = view === 'goals' ? '' : 'none';
+    tabHabits.classList.toggle('tab--active', view === 'habits');
+    tabGoals.classList.toggle('tab--active', view === 'goals');
+    if (view === 'goals' && !goalsLoaded) {
+      goalsLoaded = true;
+      void renderGoalsBoard(goalsView, userId);
+    }
+  }
+  tabHabits.addEventListener('click', () => showView('habits'));
+  tabGoals.addEventListener('click', () => showView('goals'));
+
+  const main = el('main', { class: 'dashboard' }, [tabs, habitsView, goalsView]);
   root.append(el('div', { class: 'app' }, [topbar, main]));
 
   // Los canvas ya están en el DOM: ahora sí se pueden crear las gráficas.
@@ -174,7 +240,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
 
       renderTable(days, todayISO);
       recomputeCharts(days, todayISO);
-      await refreshStreak();
+      await refreshStats();
     } catch (err) {
       toast(errorMessage(err, 'No se pudieron cargar tus hábitos.'), 'error');
       renderError();
@@ -286,8 +352,8 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
 
     try {
       await setCompletion(userId, habit.id, dateISO, next);
-      // La racha solo puede cambiar si tocamos una fecha reciente.
-      await refreshStreak();
+      // Las estadísticas solo cambian si tocamos una fecha dentro de sus ventanas.
+      await refreshStats();
     } catch (err) {
       // Revertir si falla.
       setBox(box, wasDone, habit.color);
@@ -344,28 +410,132 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
     weekPctValue.textContent = cells > 0 ? `${Math.round((filled / cells) * 100)}%` : '0%';
   }
 
-  /** Racha: días consecutivos (hasta hoy) con al menos un hábito completado. */
-  async function refreshStreak(): Promise<void> {
+  /**
+   * Estadísticas extendidas: racha actual, mejor racha histórica, % de
+   * consistencia del mes, mapa de calor (10 semanas) y % de éxito por hábito
+   * (últimos 30 días). Se calculan a partir de una sola consulta.
+   */
+  async function refreshStats(): Promise<void> {
     try {
       const today = new Date();
-      const startISO = toISODate(addDays(today, -89));
+      const lookbackDays = 371; // ~53 semanas: cubre el mapa de calor y la racha histórica
+      const startISO = toISODate(addDays(today, -(lookbackDays - 1)));
       const endISO = toISODate(today);
       const logs = await getLogsForRange(startISO, endISO);
 
       const activeDays = new Set<string>();
-      for (const log of logs) if (log.completed) activeDays.add(log.log_date);
+      const doneCountByDay = new Map<string, number>();
+      const perHabitDone = new Map<string, number>();
+      const monthStartISO = toISODate(new Date(today.getFullYear(), today.getMonth(), 1));
+      const last30StartISO = toISODate(addDays(today, -29));
 
+      for (const log of logs) {
+        if (!log.completed) continue;
+        activeDays.add(log.log_date);
+        doneCountByDay.set(log.log_date, (doneCountByDay.get(log.log_date) ?? 0) + 1);
+        if (log.log_date >= last30StartISO) {
+          perHabitDone.set(log.habit_id, (perHabitDone.get(log.habit_id) ?? 0) + 1);
+        }
+      }
+
+      // Racha actual: días consecutivos (hasta hoy) con al menos un hábito completado.
       let streak = 0;
       let cursor = new Date(today);
-      // Si hoy aún no tiene actividad, la racha puede seguir viva desde ayer.
       if (!activeDays.has(toISODate(cursor))) cursor = addDays(cursor, -1);
       while (activeDays.has(toISODate(cursor))) {
         streak++;
         cursor = addDays(cursor, -1);
       }
       streakValue.textContent = String(streak);
+
+      // Mejor racha dentro de la ventana consultada.
+      let best = 0;
+      let run = 0;
+      for (let i = 0; i < lookbackDays; i++) {
+        const dISO = toISODate(addDays(today, -(lookbackDays - 1) + i));
+        if (activeDays.has(dISO)) {
+          run++;
+          best = Math.max(best, run);
+        } else {
+          run = 0;
+        }
+      }
+      bestStreakValue.textContent = String(Math.max(best, streak));
+
+      // % de días del mes (hasta hoy) con al menos un hábito completado.
+      let monthActiveDays = 0;
+      for (const dateISO of activeDays) if (dateISO >= monthStartISO) monthActiveDays++;
+      const daysElapsedInMonth = today.getDate();
+      monthPctValue.textContent = `${Math.round((monthActiveDays / daysElapsedInMonth) * 100)}%`;
+
+      renderHeatmap(doneCountByDay, today);
+      renderHabitStats(perHabitDone, today, last30StartISO);
     } catch {
-      // La racha es secundaria: si falla, no interrumpimos la experiencia.
+      // Las estadísticas extendidas son secundarias: si fallan, no interrumpimos la experiencia.
+    }
+  }
+
+  /** Pinta el mapa de calor: 10 semanas (lunes a domingo) hasta la semana actual. */
+  function renderHeatmap(doneCountByDay: Map<string, number>, today: Date): void {
+    clear(heatmapGrid);
+    const weeks = 10;
+    const totalHabits = habits.length;
+    const gridStart = addDays(startOfWeek(today), -(weeks - 1) * 7);
+    const todayISO = toISODate(today);
+
+    for (let w = 0; w < weeks; w++) {
+      for (let d = 0; d < 7; d++) {
+        const dateISO = toISODate(addDays(gridStart, w * 7 + d));
+        const cell = el('span', { class: 'heatmap__cell' });
+
+        if (dateISO > todayISO || totalHabits === 0) {
+          cell.classList.add('heatmap__cell--empty');
+          cell.title = dateISO;
+        } else {
+          const done = doneCountByDay.get(dateISO) ?? 0;
+          const pct = done / totalHabits;
+          let level = 0;
+          if (pct >= 1) level = 4;
+          else if (pct >= 0.67) level = 3;
+          else if (pct >= 0.34) level = 2;
+          else if (pct > 0) level = 1;
+          cell.classList.add(`heatmap__cell--l${level}`);
+          cell.title = `${dateISO} · ${done}/${totalHabits}`;
+        }
+        heatmapGrid.append(cell);
+      }
+    }
+  }
+
+  /** Pinta el % de cumplimiento de cada hábito en los últimos 30 días. */
+  function renderHabitStats(perHabitDone: Map<string, number>, today: Date, last30StartISO: string): void {
+    clear(habitStatsList);
+    if (habits.length === 0) {
+      habitStatsList.append(el('p', { class: 'state__text' }, ['Agrega hábitos para ver tus estadísticas.']));
+      return;
+    }
+    const todayISO = toISODate(today);
+    for (const habit of habits) {
+      const createdISO = toISODate(new Date(habit.created_at));
+      const effectiveStartISO = createdISO > last30StartISO ? createdISO : last30StartISO;
+      const daysConsidered = Math.max(1, daysBetween(effectiveStartISO, todayISO) + 1);
+      const done = perHabitDone.get(habit.id) ?? 0;
+      const pct = Math.min(100, Math.round((done / daysConsidered) * 100));
+
+      const dot = el('span', { class: 'habit-stat__dot', 'aria-hidden': 'true' });
+      dot.style.setProperty('--dot', habit.color);
+      const fill = el('div', { class: 'habit-stat__fill' });
+      fill.style.width = `${pct}%`;
+      fill.style.background = habit.color;
+
+      habitStatsList.append(
+        el('div', { class: 'habit-stat' }, [
+          dot,
+          el('span', { class: 'habit-stat__name' }, [habit.name]),
+          el('div', { class: 'habit-stat__bar' }, [fill]),
+          el('span', { class: 'habit-stat__pct' }, [`${pct}%`]),
+        ]),
+      );
     }
   }
 
@@ -382,6 +552,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
       const days = weekDays(currentMonday);
       renderTable(days, toISODate(new Date()));
       recomputeCharts(days, toISODate(new Date()));
+      await refreshStats();
       toast('Hábito agregado.', 'success');
     } catch (err) {
       toast(errorMessage(err, 'No se pudo crear el hábito.'), 'error');
@@ -398,6 +569,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
       const days = weekDays(currentMonday);
       renderTable(days, toISODate(new Date()));
       recomputeCharts(days, toISODate(new Date()));
+      await refreshStats();
       toast('Hábito actualizado.', 'success');
     } catch (err) {
       toast(errorMessage(err, 'No se pudo actualizar.'), 'error');
@@ -415,7 +587,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
       const days = weekDays(currentMonday);
       renderTable(days, toISODate(new Date()));
       recomputeCharts(days, toISODate(new Date()));
-      await refreshStreak();
+      await refreshStats();
       toast('Hábito eliminado.', 'success');
     } catch (err) {
       toast(errorMessage(err, 'No se pudo eliminar.'), 'error');
