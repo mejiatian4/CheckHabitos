@@ -122,8 +122,12 @@ export function renderAuthScreen(root: HTMLElement): void {
 
   const card = el('div', { class: 'auth__card' }, [
     el('div', { class: 'brand brand--auth' }, [
-      el('span', { class: 'brand__mark', 'aria-hidden': 'true' }),
-      el('span', { class: 'brand__name' }, ['Constancia']),
+      el('img', {
+        class: 'brand__mark',
+        src: `${import.meta.env.BASE_URL}logo-kroton.jpg`,
+        alt: 'Kroton',
+      }),
+      el('span', { class: 'brand__name' }, ['KROTON HABITS']),
     ]),
     title,
     subtitle,

@@ -38,8 +38,12 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
 
   // ---- Layout estático (se construye una vez) ----
   const brand = el('div', { class: 'brand' }, [
-    el('span', { class: 'brand__mark', 'aria-hidden': 'true' }),
-    el('span', { class: 'brand__name' }, ['Constancia']),
+    el('img', {
+      class: 'brand__mark',
+      src: `${import.meta.env.BASE_URL}logo-kroton.jpg`,
+      alt: 'Kroton',
+    }),
+    el('span', { class: 'brand__name' }, ['KROTON HABITS']),
   ]);
 
   const logoutBtn = el('button', { class: 'btn btn--ghost btn--icon-text' }, [
