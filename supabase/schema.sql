@@ -69,10 +69,41 @@ create table if not exists public.goals (
   title        text not null,
   description  text,
   term         text not null check (term in ('short', 'medium', 'long')),
-  target_date  date,
+  start_date   date,
+  end_date     date,
   completed    boolean not null default false,
   created_at   timestamptz not null default now()
 );
+
+-- Migración desde una versión anterior de este esquema que solo tenía
+-- `target_date`: agrega `start_date` y renombra `target_date` -> `end_date`.
+-- Es seguro volver a correr este bloque las veces que quieras.
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'goals' and column_name = 'start_date'
+  ) then
+    alter table public.goals add column start_date date;
+  end if;
+
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'goals' and column_name = 'target_date'
+  ) and not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'goals' and column_name = 'end_date'
+  ) then
+    alter table public.goals rename column target_date to end_date;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'goals' and column_name = 'end_date'
+  ) then
+    alter table public.goals add column end_date date;
+  end if;
+end $$;
 
 create index if not exists goals_user_term_idx
   on public.goals (user_id, term);

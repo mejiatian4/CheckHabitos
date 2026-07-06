@@ -1,6 +1,7 @@
 import type { Goal, GoalTerm } from '../lib/types';
 import { toISODate } from '../lib/dates';
 import { listGoals, createGoal, updateGoal, deleteGoal } from './api';
+import { renderGantt } from './gantt';
 import { el, clear } from '../ui/dom';
 import { icons } from '../ui/icons';
 import { toast, errorMessage } from '../ui/toast';
@@ -20,11 +21,24 @@ function formatGoalDate(iso: string): string {
   return date.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' }).replace('.', '');
 }
 
+/** Rango legible para la tarjeta: "1 jul – 15 ago 2026", o solo el extremo si falta uno. */
+function formatGoalRange(startISO: string | null, endISO: string | null): string {
+  if (startISO && endISO) return `${formatGoalDate(startISO)} – ${formatGoalDate(endISO)}`;
+  if (endISO) return `Fin: ${formatGoalDate(endISO)}`;
+  return `Inicio: ${formatGoalDate(startISO!)}`;
+}
+
 export async function renderGoalsBoard(root: HTMLElement, userId: string): Promise<void> {
   clear(root);
 
   let goals: Goal[] = [];
   const columns = new Map<GoalTerm, HTMLElement>();
+
+  const ganttBody = el('div', { class: 'gantt-wrap' });
+  const ganttCard = el('section', { class: 'card card--gantt' }, [
+    el('div', { class: 'card__head' }, [el('h2', { class: 'card__title' }, ['Cronograma'])]),
+    ganttBody,
+  ]);
 
   const board = el(
     'div',
@@ -49,7 +63,7 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
     }),
   );
 
-  root.append(board);
+  root.append(ganttCard, board);
   await loadGoals();
 
   async function loadGoals(): Promise<void> {
@@ -59,7 +73,7 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
     }
     try {
       goals = await listGoals();
-      renderColumns();
+      renderAll();
     } catch (err) {
       toast(errorMessage(err, 'No se pudieron cargar tus metas.'), 'error');
       for (const term of TERMS) {
@@ -67,6 +81,11 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
         columns.get(term)!.append(el('p', { class: 'state__text' }, ['No se pudo cargar.']));
       }
     }
+  }
+
+  function renderAll(): void {
+    renderColumns();
+    renderGantt(ganttBody, goals);
   }
 
   function renderColumns(): void {
@@ -112,11 +131,11 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
     if (goal.description) {
       bodyChildren.push(el('p', { class: 'goal-card__desc' }, [goal.description]));
     }
-    if (goal.target_date) {
-      const overdue = !goal.completed && goal.target_date < toISODate(new Date());
+    if (goal.start_date || goal.end_date) {
+      const overdue = !goal.completed && Boolean(goal.end_date) && goal.end_date! < toISODate(new Date());
       bodyChildren.push(
         el('span', { class: 'goal-card__date' + (overdue ? ' goal-card__date--overdue' : '') }, [
-          `${overdue ? 'Vencida' : 'Meta'}: ${formatGoalDate(goal.target_date)}`,
+          `${overdue ? 'Vencida · ' : ''}${formatGoalRange(goal.start_date, goal.end_date)}`,
         ]),
       );
     }
@@ -136,10 +155,11 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
         title: result.title,
         description: result.description,
         term: result.term,
-        target_date: result.targetDate,
+        start_date: result.startDate,
+        end_date: result.endDate,
       });
       goals.push(created);
-      renderColumns();
+      renderAll();
       toast('Meta agregada.', 'success');
     } catch (err) {
       toast(errorMessage(err, 'No se pudo crear la meta.'), 'error');
@@ -151,7 +171,8 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
       title: goal.title,
       description: goal.description,
       term: goal.term,
-      targetDate: goal.target_date,
+      startDate: goal.start_date,
+      endDate: goal.end_date,
     });
     if (!result) return;
     try {
@@ -159,13 +180,15 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
         title: result.title,
         description: result.description,
         term: result.term,
-        target_date: result.targetDate,
+        start_date: result.startDate,
+        end_date: result.endDate,
       });
       goal.title = result.title;
       goal.description = result.description;
       goal.term = result.term;
-      goal.target_date = result.targetDate;
-      renderColumns();
+      goal.start_date = result.startDate;
+      goal.end_date = result.endDate;
+      renderAll();
       toast('Meta actualizada.', 'success');
     } catch (err) {
       toast(errorMessage(err, 'No se pudo actualizar la meta.'), 'error');
@@ -175,12 +198,12 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
   async function onToggleGoal(goal: Goal): Promise<void> {
     const next = !goal.completed;
     goal.completed = next;
-    renderColumns();
+    renderAll();
     try {
       await updateGoal(goal.id, { completed: next });
     } catch (err) {
       goal.completed = !next;
-      renderColumns();
+      renderAll();
       toast(errorMessage(err, 'No se pudo actualizar la meta.'), 'error');
     }
   }
@@ -191,7 +214,7 @@ export async function renderGoalsBoard(root: HTMLElement, userId: string): Promi
     try {
       await deleteGoal(goal.id);
       goals = goals.filter((g) => g.id !== goal.id);
-      renderColumns();
+      renderAll();
       toast('Meta eliminada.', 'success');
     } catch (err) {
       toast(errorMessage(err, 'No se pudo eliminar.'), 'error');

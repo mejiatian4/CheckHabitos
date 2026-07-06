@@ -1,13 +1,13 @@
 import { supabase } from '../lib/supabase';
 import type { Goal, GoalTerm } from '../lib/types';
 
-/** Lista las metas del usuario: pendientes primero, ordenadas por fecha objetivo. */
+/** Lista las metas del usuario: pendientes primero, ordenadas por fecha de inicio. */
 export async function listGoals(): Promise<Goal[]> {
   const { data, error } = await supabase
     .from('goals')
     .select('*')
     .order('completed', { ascending: true })
-    .order('target_date', { ascending: true, nullsFirst: false })
+    .order('start_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true });
 
   if (error) throw error;
@@ -18,7 +18,8 @@ export interface GoalFields {
   title: string;
   description: string | null;
   term: GoalTerm;
-  target_date: string | null;
+  start_date: string | null;
+  end_date: string | null;
 }
 
 /** Crea una meta nueva. */

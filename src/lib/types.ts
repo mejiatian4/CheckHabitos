@@ -33,7 +33,8 @@ export interface Goal {
   title: string;
   description: string | null;
   term: GoalTerm;
-  target_date: string | null; // formato ISO 'YYYY-MM-DD'
+  start_date: string | null; // formato ISO 'YYYY-MM-DD'
+  end_date: string | null; // formato ISO 'YYYY-MM-DD'
   completed: boolean;
   created_at: string;
 }

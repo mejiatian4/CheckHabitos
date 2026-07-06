@@ -1,5 +1,7 @@
 import { el } from './dom';
 import type { GoalTerm } from '../lib/types';
+import { toISODate } from '../lib/dates';
+import { createDatePicker } from './calendar';
 
 /** Paleta de colores disponibles para los hábitos. */
 export const HABIT_COLORS = [
@@ -114,7 +116,8 @@ interface GoalFormResult {
   title: string;
   description: string | null;
   term: GoalTerm;
-  targetDate: string | null;
+  startDate: string | null;
+  endDate: string | null;
 }
 
 const GOAL_TERMS: { value: GoalTerm; label: string }[] = [
@@ -130,7 +133,13 @@ const GOAL_TERMS: { value: GoalTerm; label: string }[] = [
  * si se cancela.
  */
 export function openGoalForm(
-  initial?: { title: string; description: string | null; term: GoalTerm; targetDate: string | null },
+  initial?: {
+    title: string;
+    description: string | null;
+    term: GoalTerm;
+    startDate: string | null;
+    endDate: string | null;
+  },
   presetTerm?: GoalTerm,
 ): Promise<GoalFormResult | null> {
   return new Promise((resolve) => {
@@ -156,12 +165,20 @@ export function openGoalForm(
       value: initial?.description ?? '',
     });
 
-    const dateInput = el('input', {
-      type: 'date',
-      class: 'field__input',
-      id: 'goal-date',
-      value: initial?.targetDate ?? '',
+    // Calendarios de un clic: nada de escribir fechas a mano. El inicio no
+    // puede ser un día pasado, y el fin nunca puede ser anterior al inicio
+    // elegido (su calendario deshabilita esos días en cuanto el inicio cambia).
+    const todayISO = toISODate(new Date());
+    const endPicker = createDatePicker({
+      initial: initial?.endDate ?? null,
+      min: initial?.startDate ?? todayISO,
     });
+    const startPicker = createDatePicker({
+      initial: initial?.startDate ?? null,
+      min: todayISO,
+      onChange: (iso) => endPicker.setMin(iso ?? todayISO),
+    });
+    const dateError = el('p', { class: 'field__error' }, []);
 
     const termButtons = GOAL_TERMS.map(({ value, label }) => {
       const b = el(
@@ -186,24 +203,31 @@ export function openGoalForm(
       isEdit ? 'Guardar cambios' : 'Agregar meta',
     ]);
 
-    const form = el('form', { class: 'modal__card', role: 'dialog', 'aria-modal': 'true' }, [
+    const form = el('form', { class: 'modal__card modal__card--wide', role: 'dialog', 'aria-modal': 'true' }, [
       el('h2', { class: 'modal__title' }, [isEdit ? 'Editar meta' : 'Nueva meta']),
       el('div', { class: 'field' }, [
         el('label', { class: 'field__label', for: 'goal-title' }, ['Título']),
         titleInput,
       ]),
       el('div', { class: 'field' }, [
-        el('label', { class: 'field__label', for: 'goal-desc' }, ['Descripción']),
+        el('label', { class: 'field__label', for: 'goal-desc' }, ['Descripción (opcional)']),
         descInput,
       ]),
       el('div', { class: 'field' }, [
         el('label', { class: 'field__label' }, ['Plazo']),
         termRow,
       ]),
-      el('div', { class: 'field' }, [
-        el('label', { class: 'field__label', for: 'goal-date' }, ['Fecha objetivo (opcional)']),
-        dateInput,
+      el('div', { class: 'cal-pair' }, [
+        el('div', { class: 'field' }, [
+          el('label', { class: 'field__label' }, ['Inicio']),
+          startPicker.element,
+        ]),
+        el('div', { class: 'field' }, [
+          el('label', { class: 'field__label' }, ['Fin']),
+          endPicker.element,
+        ]),
       ]),
+      dateError,
       el('div', { class: 'modal__actions' }, [cancelBtn, saveBtn]),
     ]);
 
@@ -221,11 +245,22 @@ export function openGoalForm(
         titleInput.focus();
         return;
       }
+      const startDate = startPicker.getValue();
+      const endDate = endPicker.getValue();
+      if (!startDate) {
+        dateError.textContent = 'Elige una fecha de inicio en el calendario.';
+        return;
+      }
+      if (!endDate) {
+        dateError.textContent = 'Elige una fecha de fin en el calendario.';
+        return;
+      }
       close({
         title,
         description: descInput.value.trim() || null,
         term: selectedTerm,
-        targetDate: dateInput.value || null,
+        startDate,
+        endDate,
       });
     });
     cancelBtn.addEventListener('click', () => close(null));
