@@ -996,6 +996,61 @@ button {
   justify-content: flex-end;
   gap: 10px;
 }
+.modal__list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+.modal__danger-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 85, 85, 0.12);
+  color: var(--danger);
+  display: grid;
+  place-items: center;
+}
+.modal__danger-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ---------------- Configuración ---------------- */
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.settings-section__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.settings-section--danger {
+  border-color: rgba(255, 85, 85, 0.3);
+  background: rgba(255, 85, 85, 0.05);
+}
+.settings-section--danger .settings-section__title {
+  color: var(--danger);
+}
+.settings-section__text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
 
 /* Selector de color */
 .swatch-row {

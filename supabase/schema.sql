@@ -117,3 +117,27 @@ create policy "goals: solo el dueño"
   to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- ----------------------------------------------------------------
+-- Eliminar mi cuenta
+-- ----------------------------------------------------------------
+-- Un usuario autenticado no tiene permiso para borrar filas de auth.users
+-- directamente (con razón: eso lo maneja Supabase Auth). Esta función corre
+-- con los privilegios de quien la crea (security definer), así que SÍ puede
+-- borrar auth.users, pero SOLO la fila del propio usuario que la invoca
+-- (auth.uid(), tomado de su sesión — no se puede falsificar ni recibe un id
+-- como parámetro). Al borrar auth.users, los "on delete cascade" de habits,
+-- habit_logs y goals se encargan de borrar todo lo demás automáticamente.
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_my_account() from public;
+grant execute on function public.delete_my_account() to authenticated;

@@ -27,6 +27,7 @@ import { toast, errorMessage } from '../ui/toast';
 import { openHabitForm, confirmDialog } from '../ui/modal';
 import { signOut } from '../auth/auth';
 import { renderGoalsBoard } from '../goals/board';
+import { openSettingsPanel } from '../settings/panel';
 
 const key = (habitId: string, dateISO: string) => `${habitId}|${dateISO}`;
 
@@ -48,6 +49,11 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
     el('span', { class: 'brand__name' }, ['KROTON HABITS']),
   ]);
 
+  const settingsBtn = el('button', { class: 'btn btn--icon', type: 'button', 'aria-label': 'Configuración' }, [
+    icons.settings(),
+  ]);
+  settingsBtn.addEventListener('click', () => openSettingsPanel(userEmail));
+
   const logoutBtn = el('button', { class: 'btn btn--ghost btn--icon-text' }, [
     icons.logout(),
     el('span', {}, ['Salir']),
@@ -58,6 +64,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
     brand,
     el('div', { class: 'topbar__user' }, [
       el('span', { class: 'topbar__email', title: userEmail }, [userEmail]),
+      settingsBtn,
       logoutBtn,
     ]),
   ]);
