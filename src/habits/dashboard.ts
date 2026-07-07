@@ -312,7 +312,13 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
         box.style.setProperty('--habit', habit.color);
         box.addEventListener('click', () => void onToggle(habit, dateISO, box));
 
-        cells.push(el('td', { class: 'ht__cell' + (isToday ? ' is-today' : '') }, [box]));
+        cells.push(
+          el(
+            'td',
+            { class: 'ht__cell' + (isToday ? ' is-today' : ''), 'data-day-label': DAY_LABELS[i] },
+            [box],
+          ),
+        );
       });
 
       // Cumplimiento del hábito en la semana

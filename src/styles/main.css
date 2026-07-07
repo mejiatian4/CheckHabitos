@@ -1600,6 +1600,67 @@ button {
   }
 }
 
+/* ---------------- Tabla de hábitos -> tarjetas en móvil ----------------
+   position: sticky en una celda de tabla, dentro de un contenedor con
+   scroll horizontal, es poco fiable en Safari/Chrome móvil (el nombre del
+   hábito quedaba "cortado" y las casillas del día no se veían). En vez de
+   depender del scroll horizontal, convertimos cada fila en una tarjeta:
+   nombre arriba, las 7 casillas del día abajo en una franja que sí cabe en
+   pantalla. */
+@media (max-width: 640px) {
+  .ht {
+    min-width: 0;
+  }
+  .ht thead {
+    display: none;
+  }
+  .ht tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 10px;
+    column-gap: 8px;
+    padding: 14px 4px;
+  }
+  .ht__habit {
+    position: static;
+    background: transparent;
+    flex: 1 1 100%;
+    padding: 0 !important;
+  }
+  .ht__habit-inner {
+    white-space: normal;
+  }
+  .ht__cell {
+    flex: 0 0 auto;
+    padding: 0 !important;
+  }
+  .ht__cell::before {
+    content: attr(data-day-label);
+    display: block;
+    text-align: center;
+    font-size: 0.62rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .ht__cell.is-today::before {
+    color: var(--brand);
+  }
+  .ht__week {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+  .ht__actions {
+    flex: 0 0 auto;
+  }
+  /* Sin :hover en pantallas táctiles: editar/eliminar deben verse siempre. */
+  .ht__actions-inner {
+    opacity: 1;
+  }
+}
+
 /* ---------------- Movimiento reducido ---------------- */
 @media (prefers-reduced-motion: reduce) {
   *,
