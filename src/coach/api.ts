@@ -3,7 +3,7 @@ import type { ChatMessage } from '../lib/types';
 
 /**
  * Envía un mensaje al coach de IA (Edge Function `ai-coach`, que llama a la
- * API gratuita de Gemini). `supabase.functions.invoke` adjunta automáticamente
+ * API gratuita de Groq). `supabase.functions.invoke` adjunta automáticamente
  * el token del usuario autenticado, así la función puede verificar quién pregunta.
  */
 export async function sendCoachMessage(message: string, history: ChatMessage[]): Promise<string> {
