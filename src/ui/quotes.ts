@@ -137,6 +137,40 @@ export function createQuoteCard(): HTMLElement {
     body,
   ]);
 
+  // Reserva la altura de la frase más larga (medida con el ancho real de la
+  // tarjeta) para que al rotar no cambie de tamaño y no empuje el resto de
+  // secciones hacia abajo — se recalcula si el ancho cambia (responsive).
+  let lastWidth = 0;
+  function lockHeight(): void {
+    const width = body.clientWidth;
+    if (width === 0 || width === lastWidth) return;
+    lastWidth = width;
+
+    const probe = body.cloneNode(true) as HTMLElement;
+    probe.style.position = 'absolute';
+    probe.style.visibility = 'hidden';
+    probe.style.minHeight = '0';
+    probe.style.transform = 'none';
+    probe.style.width = `${width}px`;
+    document.body.appendChild(probe);
+    const probeText = probe.querySelector('.quote-card__text') as HTMLElement;
+
+    let max = 0;
+    for (const q of QUOTES) {
+      probeText.textContent = q.text;
+      max = Math.max(max, probe.scrollHeight);
+    }
+    document.body.removeChild(probe);
+    body.style.minHeight = `${max}px`;
+  }
+
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(() => lockHeight()).observe(body);
+  } else {
+    window.setTimeout(lockHeight, 0);
+    window.addEventListener('resize', lockHeight);
+  }
+
   window.setInterval(() => {
     // Sale la frase actual deslizándose hacia la izquierda mientras se desvanece.
     body.style.transition = `opacity ${OUT_MS}ms ${EASE_OUT}, transform ${OUT_MS}ms ${EASE_OUT}`;

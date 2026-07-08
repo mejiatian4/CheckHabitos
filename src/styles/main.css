@@ -288,10 +288,11 @@ button {
 .quote-card__body {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 9px;
   min-width: 0;
   opacity: 1;
-  transform: translateY(0);
+  transform: translateX(0);
 }
 .quote-card__text {
   margin: 0;
