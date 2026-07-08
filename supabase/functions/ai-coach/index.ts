@@ -14,10 +14,12 @@
 //
 // La función exige un usuario autenticado (verifica el JWT que llega en el
 // header Authorization) para que nadie pueda usarla sin haber iniciado
-// sesión en la app. No lee datos de hábitos/metas del usuario todavía: es
-// un coach conversacional, sin acceso a la base de datos.
+// sesión en la app. Antes de llamar al modelo, consulta los hábitos, registros
+// y metas del propio usuario (con su mismo token, así que RLS aplica igual
+// que en el cliente: jamás puede ver datos de otra persona) y arma un resumen
+// que se le da al modelo como contexto, para que responda con datos reales.
 
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 // API compatible con el formato de OpenAI.
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
@@ -28,10 +30,11 @@ const SYSTEM_PROMPT =
   'hábitos y sus metas. Respondes siempre en español, con un tono cercano, directo y motivador, ' +
   'inspirado en la filosofía estoica (disciplina, enfocarse en lo que depende de uno, constancia ' +
   'diaria) pero sin sonar acartonado ni repetitivo. Das consejos prácticos y concretos, nunca genéricos ' +
-  'ni de relleno. Mantén las respuestas breves (3 a 5 líneas) salvo que te pidan más detalle. No ' +
-  'inventes datos sobre el progreso real del usuario (rachas, porcentajes, metas): si preguntan por sus ' +
-  'métricas exactas, diles que las revisen en las pestañas "Hábitos" o "Metas" de la app, porque tú no ' +
-  'tienes acceso a esa información todavía.';
+  'ni de relleno. Mantén las respuestas breves (3 a 5 líneas) salvo que te pidan más detalle. Antes de ' +
+  'cada mensaje del usuario recibes un bloque "CONTEXTO REAL DEL USUARIO" con sus hábitos, rachas y ' +
+  'metas actuales: básate en esos datos para responder y para dar consejos concretos sobre ESAS metas o ' +
+  'hábitos en particular. Nunca inventes números, fechas o metas que no estén en ese contexto. Si algo ' +
+  'que te preguntan no aparece ahí, dilo con naturalidad en vez de inventarlo.';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -40,10 +43,32 @@ const CORS_HEADERS = {
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_TURNS = 10;
+const LOOKBACK_DAYS = 60;
 
 interface ChatTurn {
   role: 'user' | 'assistant';
   text: string;
+}
+
+interface HabitRow {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
+interface LogRow {
+  habit_id: string;
+  log_date: string;
+  completed: boolean;
+}
+
+interface GoalRow {
+  title: string;
+  description: string | null;
+  term: 'short' | 'medium' | 'long';
+  start_date: string | null;
+  end_date: string | null;
+  completed: boolean;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -51,6 +76,146 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
+}
+
+// ---- Fechas: trabajamos siempre con strings 'YYYY-MM-DD' y aritmética en
+// UTC, para que el resultado no dependa de la zona horaria del servidor. ----
+
+function isValidISODate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysBetweenISO(aISO: string, bISO: string): number {
+  const ms = new Date(`${bISO}T00:00:00Z`).getTime() - new Date(`${aISO}T00:00:00Z`).getTime();
+  return Math.round(ms / 86_400_000);
+}
+
+const TERM_LABEL: Record<GoalRow['term'], string> = {
+  short: 'Corto plazo',
+  medium: 'Mediano plazo',
+  long: 'Largo plazo',
+};
+
+function formatGoals(goals: GoalRow[]): string {
+  if (goals.length === 0) return 'Todavía no tiene ninguna meta creada.';
+
+  const byTerm: Record<GoalRow['term'], GoalRow[]> = { short: [], medium: [], long: [] };
+  for (const g of goals) byTerm[g.term]?.push(g);
+
+  const parts: string[] = [];
+  for (const term of ['short', 'medium', 'long'] as const) {
+    const list = byTerm[term];
+    if (list.length === 0) continue;
+    const lines = list.map((g) => {
+      const status = g.completed ? 'cumplida' : 'pendiente';
+      const range = g.start_date && g.end_date ? ` (del ${g.start_date} al ${g.end_date})` : '';
+      const desc = g.description ? ` — ${g.description}` : '';
+      return `  · "${g.title}"${range}, ${status}${desc}`;
+    });
+    parts.push(`${TERM_LABEL[term]}:\n${lines.join('\n')}`);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Trae hábitos, registros recientes y metas del usuario (con su propio
+ * token, respetando RLS) y arma un resumen en texto plano para dárselo al
+ * modelo como contexto. Si algo falla, devuelve un contexto de aviso en vez
+ * de tumbar la conversación entera.
+ */
+async function buildUserContext(supabaseClient: SupabaseClient, todayISO: string): Promise<string> {
+  const windowStartISO = addDaysISO(todayISO, -(LOOKBACK_DAYS - 1));
+  const last30StartISO = addDaysISO(todayISO, -29);
+
+  const [habitsRes, logsRes, goalsRes] = await Promise.all([
+    supabaseClient.from('habits').select('id, name, created_at').order('position', { ascending: true }),
+    supabaseClient
+      .from('habit_logs')
+      .select('habit_id, log_date, completed')
+      .gte('log_date', windowStartISO)
+      .lte('log_date', todayISO),
+    supabaseClient
+      .from('goals')
+      .select('title, description, term, start_date, end_date, completed')
+      .order('created_at', { ascending: true }),
+  ]);
+
+  if (habitsRes.error || logsRes.error || goalsRes.error) {
+    console.error('Context fetch error:', habitsRes.error, logsRes.error, goalsRes.error);
+    return 'No se pudo cargar el contexto del usuario en este momento (falla temporal). Dile que lo intente de nuevo si necesitas sus datos reales.';
+  }
+
+  const habits = (habitsRes.data ?? []) as HabitRow[];
+  const logs = (logsRes.data ?? []) as LogRow[];
+  const goals = (goalsRes.data ?? []) as GoalRow[];
+
+  // Días con al menos un hábito cumplido (para racha y % del mes).
+  const activeDays = new Set<string>();
+  const perHabitDone = new Map<string, number>();
+  for (const log of logs) {
+    if (!log.completed) continue;
+    activeDays.add(log.log_date);
+    if (log.log_date >= last30StartISO) {
+      perHabitDone.set(log.habit_id, (perHabitDone.get(log.habit_id) ?? 0) + 1);
+    }
+  }
+
+  // Racha actual.
+  let streak = 0;
+  let cursor = activeDays.has(todayISO) ? todayISO : addDaysISO(todayISO, -1);
+  while (activeDays.has(cursor)) {
+    streak++;
+    cursor = addDaysISO(cursor, -1);
+  }
+
+  // Mejor racha dentro de la ventana consultada.
+  let best = 0;
+  let run = 0;
+  for (let i = 0; i < LOOKBACK_DAYS; i++) {
+    const d = addDaysISO(windowStartISO, i);
+    if (activeDays.has(d)) {
+      run++;
+      best = Math.max(best, run);
+    } else {
+      run = 0;
+    }
+  }
+  best = Math.max(best, streak);
+
+  // % de días del mes (hasta hoy) con al menos un hábito cumplido.
+  const monthStartISO = `${todayISO.slice(0, 7)}-01`;
+  const dayOfMonth = Number(todayISO.slice(8, 10));
+  let monthActiveDays = 0;
+  for (const d of activeDays) if (d >= monthStartISO && d <= todayISO) monthActiveDays++;
+  const monthPct = dayOfMonth > 0 ? Math.round((monthActiveDays / dayOfMonth) * 100) : 0;
+
+  // % de cumplimiento por hábito en los últimos 30 días.
+  const habitLines = habits.map((h) => {
+    const createdISO = h.created_at.slice(0, 10);
+    const effectiveStartISO = createdISO > last30StartISO ? createdISO : last30StartISO;
+    const daysConsidered = Math.max(1, daysBetweenISO(effectiveStartISO, todayISO) + 1);
+    const done = perHabitDone.get(h.id) ?? 0;
+    const pct = Math.min(100, Math.round((done / daysConsidered) * 100));
+    return `  · ${h.name}: ${pct}%`;
+  });
+
+  return (
+    `CONTEXTO REAL DEL USUARIO (hoy es ${todayISO}; no lo inventes de otra forma, esto es lo único ` +
+    `fiable que tienes de él):\n\n` +
+    `Racha y constancia:\n` +
+    `  · Racha actual: ${streak} día(s) consecutivos.\n` +
+    `  · Mejor racha reciente: ${best}${best >= LOOKBACK_DAYS ? '+' : ''} día(s) (últimos ${LOOKBACK_DAYS} días).\n` +
+    `  · Cumplimiento de este mes: ${monthPct}%.\n\n` +
+    `Hábitos (% de cumplimiento, últimos 30 días):\n` +
+    `${habits.length ? habitLines.join('\n') : '  · Todavía no tiene hábitos creados.'}\n\n` +
+    `Metas:\n${formatGoals(goals)}`
+  );
 }
 
 Deno.serve(async (req: Request) => {
@@ -72,7 +237,7 @@ Deno.serve(async (req: Request) => {
   const { data: userData, error: userError } = await supabaseClient.auth.getUser();
   if (userError || !userData.user) return json({ error: 'No autenticado.' }, 401);
 
-  let body: { message?: unknown; history?: unknown };
+  let body: { message?: unknown; history?: unknown; todayISO?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -83,13 +248,18 @@ Deno.serve(async (req: Request) => {
   if (!message) return json({ error: 'Mensaje vacío.' }, 400);
   if (message.length > MAX_MESSAGE_LENGTH) return json({ error: 'El mensaje es demasiado largo.' }, 400);
 
+  const todayISO = isValidISODate(body.todayISO) ? body.todayISO : new Date().toISOString().slice(0, 10);
+
   const rawHistory = Array.isArray(body.history) ? (body.history as ChatTurn[]) : [];
   const history = rawHistory
     .filter((turn) => (turn.role === 'user' || turn.role === 'assistant') && typeof turn.text === 'string')
     .slice(-MAX_HISTORY_TURNS);
 
+  const userContext = await buildUserContext(supabaseClient, todayISO);
+
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: userContext },
     ...history.map((turn) => ({ role: turn.role, content: turn.text })),
     { role: 'user', content: message },
   ];

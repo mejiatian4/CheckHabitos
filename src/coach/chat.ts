@@ -5,13 +5,13 @@ import { sendCoachMessage } from './api';
 import type { ChatMessage } from '../lib/types';
 
 const WELCOME =
-  'Hola, soy tu coach de KROTON HABITOS. Cuéntame cómo vas con tus hábitos o pregúntame algo sobre disciplina, constancia o tus metas.';
+  'Hola, soy tu coach de KROTON HABITOS. Ya puedo ver tus hábitos, tu racha y tus metas reales — pregúntame lo que quieras sobre ellos, o algo de disciplina y constancia en general.';
 
 const SUGGESTIONS = [
   '¿Cómo voy esta semana?',
+  '¿Qué opinas de mis metas?',
   'Ayúdame a no romper mi racha',
   'Dame un consejo para hoy',
-  'Ayúdame a definir una meta',
 ];
 
 const INPUT_MAX_HEIGHT = 120;
