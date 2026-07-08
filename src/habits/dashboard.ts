@@ -29,6 +29,7 @@ import { signOut } from '../auth/auth';
 import { renderGoalsBoard } from '../goals/board';
 import { openSettingsPanel } from '../settings/panel';
 import { createQuoteCard } from '../ui/quotes';
+import { renderCoachChat } from '../coach/chat';
 
 const key = (habitId: string, dateISO: string) => `${habitId}|${dateISO}`;
 
@@ -183,29 +184,39 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
   const tableWrap = el('div', { class: 'table-wrap' });
   const weekSection = el('section', { class: 'week' }, [weeknav, tableWrap]);
 
-  // ---- Pestañas: Hábitos / Metas ----
+  // ---- Pestañas: Hábitos / Metas / Coach ----
   const habitsView = el('div', { class: 'view' }, [createQuoteCard(), overview, weekSection, statsGrid]);
   const goalsView = el('div', { class: 'view', style: 'display:none' });
+  const coachView = el('div', { class: 'view', style: 'display:none' });
 
   const tabHabits = el('button', { class: 'tab tab--active', type: 'button' }, ['Hábitos']);
   const tabGoals = el('button', { class: 'tab', type: 'button' }, ['Metas']);
-  const tabs = el('div', { class: 'tabs' }, [tabHabits, tabGoals]);
+  const tabCoach = el('button', { class: 'tab', type: 'button' }, ['Coach']);
+  const tabs = el('div', { class: 'tabs' }, [tabHabits, tabGoals, tabCoach]);
 
   let goalsLoaded = false;
-  function showView(view: 'habits' | 'goals'): void {
+  let coachLoaded = false;
+  function showView(view: 'habits' | 'goals' | 'coach'): void {
     habitsView.style.display = view === 'habits' ? '' : 'none';
     goalsView.style.display = view === 'goals' ? '' : 'none';
+    coachView.style.display = view === 'coach' ? '' : 'none';
     tabHabits.classList.toggle('tab--active', view === 'habits');
     tabGoals.classList.toggle('tab--active', view === 'goals');
+    tabCoach.classList.toggle('tab--active', view === 'coach');
     if (view === 'goals' && !goalsLoaded) {
       goalsLoaded = true;
       void renderGoalsBoard(goalsView, userId);
     }
+    if (view === 'coach' && !coachLoaded) {
+      coachLoaded = true;
+      renderCoachChat(coachView);
+    }
   }
   tabHabits.addEventListener('click', () => showView('habits'));
   tabGoals.addEventListener('click', () => showView('goals'));
+  tabCoach.addEventListener('click', () => showView('coach'));
 
-  const main = el('main', { class: 'dashboard' }, [tabs, habitsView, goalsView]);
+  const main = el('main', { class: 'dashboard' }, [tabs, habitsView, goalsView, coachView]);
   root.append(el('div', { class: 'app' }, [topbar, main]));
 
   // Los canvas ya están en el DOM: ahora sí se pueden crear las gráficas.

@@ -38,3 +38,9 @@ export interface Goal {
   completed: boolean;
   created_at: string;
 }
+
+/** Un mensaje en la conversación con el coach de IA. */
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
