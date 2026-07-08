@@ -1,14 +1,15 @@
 // ============================================================
 //  Edge Function: ai-coach
 //  Chat con el coach de hábitos de KROTON HABITOS, usando la API
-//  gratuita de Gemini (Google AI Studio) como modelo.
+//  gratuita de Groq (no pide tarjeta, a diferencia del free tier
+//  de Gemini que en algunas cuentas/regiones exige billing).
 // ============================================================
 //
 // Cómo desplegarla (una sola vez, con la Supabase CLI):
 //   1. supabase login
 //   2. supabase link --project-ref <tu-project-ref>
-//   3. Crea una API key gratis en https://aistudio.google.com/app/apikey
-//   4. supabase secrets set GEMINI_API_KEY=tu_api_key
+//   3. Crea una API key gratis en https://console.groq.com/keys
+//   4. supabase secrets set GROQ_API_KEY=tu_api_key
 //   5. supabase functions deploy ai-coach
 //
 // La función exige un usuario autenticado (verifica el JWT que llega en el
@@ -18,8 +19,9 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+// API compatible con el formato de OpenAI.
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 const SYSTEM_PROMPT =
   'Eres el Coach de KROTON HABITOS, un asistente que ayuda a las personas a ser constantes con sus ' +
@@ -55,8 +57,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Método no permitido.' }, 405);
 
-  const geminiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!geminiKey) return json({ error: 'Falta configurar GEMINI_API_KEY en los secrets de Supabase.' }, 500);
+  const groqKey = Deno.env.get('GROQ_API_KEY');
+  if (!groqKey) return json({ error: 'Falta configurar GROQ_API_KEY en los secrets de Supabase.' }, 500);
 
   // Solo usuarios autenticados de la app pueden usar el coach.
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -86,37 +88,39 @@ Deno.serve(async (req: Request) => {
     .filter((turn) => (turn.role === 'user' || turn.role === 'assistant') && typeof turn.text === 'string')
     .slice(-MAX_HISTORY_TURNS);
 
-  const contents = [
-    ...history.map((turn) => ({
-      role: turn.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: turn.text }],
-    })),
-    { role: 'user', parts: [{ text: message }] },
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    ...history.map((turn) => ({ role: turn.role, content: turn.text })),
+    { role: 'user', content: message },
   ];
 
-  let geminiRes: Response;
+  let groqRes: Response;
   try {
-    geminiRes = await fetch(`${GEMINI_URL}?key=${geminiKey}`, {
+    groqRes = await fetch(GROQ_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${groqKey}`,
+      },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents,
-        generationConfig: { maxOutputTokens: 400, temperature: 0.7 },
+        model: GROQ_MODEL,
+        messages,
+        max_tokens: 400,
+        temperature: 0.7,
       }),
     });
   } catch (err) {
-    console.error('Gemini fetch failed:', err);
+    console.error('Groq fetch failed:', err);
     return json({ error: 'El asistente no está disponible en este momento.' }, 502);
   }
 
-  if (!geminiRes.ok) {
-    console.error('Gemini error:', geminiRes.status, await geminiRes.text());
+  if (!groqRes.ok) {
+    console.error('Groq error:', groqRes.status, await groqRes.text());
     return json({ error: 'El asistente no está disponible en este momento.' }, 502);
   }
 
-  const data = await geminiRes.json();
-  const reply: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  const data = await groqRes.json();
+  const reply: string | undefined = data?.choices?.[0]?.message?.content;
   if (!reply) return json({ error: 'El asistente no pudo generar una respuesta. Intenta de nuevo.' }, 502);
 
   return json({ reply });
