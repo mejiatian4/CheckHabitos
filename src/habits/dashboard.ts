@@ -46,7 +46,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
       src: `${import.meta.env.BASE_URL}logo-kroton.jpg`,
       alt: 'Kroton',
     }),
-    el('span', { class: 'brand__name' }, ['KROTON HABITS']),
+    el('span', { class: 'brand__name' }, ['KROTON HABITOS']),
   ]);
 
   const settingsBtn = el('button', { class: 'btn btn--icon', type: 'button', 'aria-label': 'Configuración' }, [

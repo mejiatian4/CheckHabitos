@@ -1,4 +1,4 @@
-# KROTON HABITS — Rastreador de hábitos
+# KROTON HABITOS — Rastreador de hábitos
 
 Aplicación web para registrar hábitos día a día y visualizar el progreso. Tabla semanal de lunes a domingo con casillas por día, gráfica del progreso de hoy, resumen semanal en barras y racha de días consecutivos. Los datos se guardan en **Supabase**, así que puedes ver tu progreso desde cualquier dispositivo iniciando sesión.
 

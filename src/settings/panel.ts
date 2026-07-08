@@ -53,7 +53,7 @@ export function openSettingsPanel(userEmail: string): void {
     el('div', { class: 'settings-section settings-section--danger' }, [
       el('h3', { class: 'settings-section__title' }, ['Zona de peligro']),
       el('p', { class: 'settings-section__text' }, [
-        'Elimina tu cuenta y todos tus datos de KROTON HABITS de forma permanente.',
+        'Elimina tu cuenta y todos tus datos de KROTON HABITOS de forma permanente.',
       ]),
       deleteBtn,
     ]),

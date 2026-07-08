@@ -55,7 +55,7 @@ export async function downloadGoalsPdf(goals: Goal[], userEmail: string): Promis
     doc.setTextColor(252, 184, 39);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(20);
-    doc.text('KROTON HABITS', textX, 40);
+    doc.text('KROTON HABITOS', textX, 40);
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
@@ -125,5 +125,5 @@ export async function downloadGoalsPdf(goals: Goal[], userEmail: string): Promis
     y += 10;
   }
 
-  doc.save('kroton-habits-metas.pdf');
+  doc.save('kroton-habitos-metas.pdf');
 }
