@@ -14,6 +14,8 @@ const SUGGESTIONS = [
   'Ayúdame a definir una meta',
 ];
 
+const INPUT_MAX_HEIGHT = 120;
+
 /** Pinta el chat con el coach de IA. Se monta una sola vez por sesión (lazy). */
 export function renderCoachChat(root: HTMLElement): void {
   clear(root);
@@ -61,27 +63,39 @@ export function renderCoachChat(root: HTMLElement): void {
   });
   input.addEventListener('input', () => autoGrow());
 
-  const card = el('section', { class: 'card card--chat' }, [
-    el('div', { class: 'card__head' }, [
-      el('h2', { class: 'card__title' }, ['Coach']),
+  const header = el('div', { class: 'chat__head' }, [
+    el('span', { class: 'chat__head-mark', 'aria-hidden': 'true' }, [icons.sparkles()]),
+    el('div', { class: 'chat__head-body' }, [
+      el('h2', { class: 'card__title chat__head-title' }, ['Coach']),
+      el('p', { class: 'chat__head-subtitle' }, ['Tu guía de constancia, disponible cuando la necesites']),
     ]),
-    messages,
-    suggestions,
-    form,
   ]);
+
+  const card = el('section', { class: 'card card--chat' }, [header, messages, suggestions, form]);
 
   root.append(card);
   appendMessage('assistant', WELCOME);
+  autoGrow();
   input.focus();
 
+  // Crece renglón a renglón con el texto (como un chat de IA moderno) en vez
+  // de mostrar un scroll interno; solo se habilita el scroll si se llega al
+  // alto máximo.
   function autoGrow(): void {
     input.style.height = 'auto';
-    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+    const next = Math.min(input.scrollHeight, INPUT_MAX_HEIGHT);
+    input.style.height = `${next}px`;
+    input.style.overflowY = input.scrollHeight > INPUT_MAX_HEIGHT ? 'auto' : 'hidden';
+  }
+
+  function avatar(): HTMLElement {
+    return el('span', { class: 'chat__avatar', 'aria-hidden': 'true' }, [icons.sparkles()]);
   }
 
   function appendMessage(role: ChatMessage['role'], text: string): HTMLElement {
     const bubble = el('div', { class: `chat__bubble chat__bubble--${role}` }, [text]);
-    const row = el('div', { class: `chat__row chat__row--${role}` }, [bubble]);
+    const rowChildren = role === 'assistant' ? [avatar(), bubble] : [bubble];
+    const row = el('div', { class: `chat__row chat__row--${role}` }, rowChildren);
     messages.append(row);
     messages.scrollTop = messages.scrollHeight;
     return row;
@@ -93,7 +107,7 @@ export function renderCoachChat(root: HTMLElement): void {
       el('span', { class: 'chat__dot' }),
       el('span', { class: 'chat__dot' }),
     ]);
-    const row = el('div', { class: 'chat__row chat__row--assistant' }, [bubble]);
+    const row = el('div', { class: 'chat__row chat__row--assistant' }, [avatar(), bubble]);
     messages.append(row);
     messages.scrollTop = messages.scrollHeight;
     return row;
