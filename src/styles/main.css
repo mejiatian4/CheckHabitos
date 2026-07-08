@@ -286,6 +286,7 @@ button {
   opacity: 0.32;
 }
 .quote-card__body {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1637,6 +1638,9 @@ button {
     align-items: flex-start;
     gap: 6px;
     padding: 20px;
+  }
+  .quote-card__body {
+    width: 100%;
   }
   .quote-card__mark {
     font-size: 2.6rem;

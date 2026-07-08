@@ -141,9 +141,10 @@ export function createQuoteCard(): HTMLElement {
   // tarjeta) para que al rotar no cambie de tamaño y no empuje el resto de
   // secciones hacia abajo — se recalcula si el ancho cambia (responsive).
   let lastWidth = 0;
-  function lockHeight(): void {
+  function lockHeight(force = false): void {
     const width = body.clientWidth;
-    if (width === 0 || width === lastWidth) return;
+    if (width === 0) return;
+    if (!force && width === lastWidth) return;
     lastWidth = width;
 
     const probe = body.cloneNode(true) as HTMLElement;
@@ -167,8 +168,15 @@ export function createQuoteCard(): HTMLElement {
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(() => lockHeight()).observe(body);
   } else {
-    window.setTimeout(lockHeight, 0);
-    window.addEventListener('resize', lockHeight);
+    window.setTimeout(() => lockHeight(), 0);
+    window.addEventListener('resize', () => lockHeight());
+  }
+
+  // El "swap" de las fuentes web (DM Sans) llega después del primer render y
+  // puede cambiar cuántas líneas ocupa el texto con el mismo ancho — se
+  // recalcula la altura reservada una vez que las fuentes ya cargaron.
+  if (typeof document !== 'undefined' && 'fonts' in document) {
+    void document.fonts.ready.then(() => lockHeight(true));
   }
 
   window.setInterval(() => {
