@@ -28,6 +28,7 @@ import { openHabitForm, confirmDialog } from '../ui/modal';
 import { signOut } from '../auth/auth';
 import { renderGoalsBoard } from '../goals/board';
 import { openSettingsPanel } from '../settings/panel';
+import { createQuoteCard } from '../ui/quotes';
 
 const key = (habitId: string, dateISO: string) => `${habitId}|${dateISO}`;
 
@@ -183,7 +184,7 @@ export function renderDashboard(root: HTMLElement, userId: string, userEmail: st
   const weekSection = el('section', { class: 'week' }, [weeknav, tableWrap]);
 
   // ---- Pestañas: Hábitos / Metas ----
-  const habitsView = el('div', { class: 'view' }, [overview, weekSection, statsGrid]);
+  const habitsView = el('div', { class: 'view' }, [createQuoteCard(), overview, weekSection, statsGrid]);
   const goalsView = el('div', { class: 'view', style: 'display:none' });
 
   const tabHabits = el('button', { class: 'tab tab--active', type: 'button' }, ['Hábitos']);
