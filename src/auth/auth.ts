@@ -103,6 +103,13 @@ export function renderAuthScreen(root: HTMLElement): void {
         const { data, error } = await supabase.auth.signUp({
           email: emailValue,
           password: passwordValue,
+          options: {
+            // A dónde regresa el enlace de confirmación del correo. Se arma
+            // con la URL desde la que realmente se registró la persona (local
+            // en desarrollo, GitHub Pages en producción), en vez de depender
+            // del "Site URL" fijo configurado en el panel de Supabase.
+            emailRedirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+          },
         });
         if (error) throw error;
         // Si el proyecto exige confirmación por correo, no habrá sesión todavía.
