@@ -109,13 +109,14 @@ button {
   top: 0;
   left: 0;
   right: 0;
+  height: 44px;
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 10px 20px;
-  background: rgba(0, 0, 0, 0.93);
+  padding: 0 20px;
+  background: rgba(0, 0, 0, 0.8);
   border-bottom: 1px solid rgba(252, 184, 39, 0.25);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
