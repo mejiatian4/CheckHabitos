@@ -6,7 +6,7 @@ import { defineConfig } from 'vite';
 //
 // Puedes sobreescribirlo sin tocar código pasando la variable de entorno BASE_PATH:
 //   BASE_PATH=/mi-repo/ npm run build
-const base = process.env.BASE_PATH ?? '/habit-tracker/';
+const base = process.env.BASE_PATH ?? '/';
 
 export default defineConfig({
   base,
