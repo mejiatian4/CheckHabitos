@@ -40,9 +40,8 @@ jobs:
           # Settings -> Secrets and variables -> Actions -> New repository secret
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # El base path se toma automáticamente del nombre del repositorio,
-          # así no hay que tocarlo a mano. Resultado: '/nombre-del-repo/'.
-          BASE_PATH: /${{ github.event.repository.name }}/
+          # Sin BASE_PATH: vite.config.ts usa su default '/', correcto para
+          # servir desde la raíz de habitos.krotonoficial.com.
 
       - name: Subir artefacto de Pages
         uses: actions/upload-pages-artifact@v3
